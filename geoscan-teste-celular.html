@@ -262,9 +262,16 @@ let gpsWatch = null;
 let ultimoEnvio = null;
 
 function iniciar() {
+  if (typeof firebase === 'undefined') {
+    overlayMsg.innerHTML = '❌ Firebase bloqueado pelo navegador.<br><br>Abra este link no <strong>Chrome</strong> — o Brave Browser bloqueia scripts necessários.';
+    document.querySelector('.spinner').style.display = 'none';
+    return;
+  }
   const config = { apiKey: API_KEY, databaseURL: DB_URL };
   try {
-    firebase.initializeApp(config);
+    if (!firebase.apps.length) {
+      firebase.initializeApp(config);
+    }
     db = firebase.database();
     sessionRef = db.ref('sessoes/' + SESSION_ID);
 
