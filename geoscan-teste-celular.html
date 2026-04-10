@@ -2,462 +2,575 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>GeoScan — Teste de Rastreamento</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GeoScan — Painel de Teste</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: 'DM Sans', sans-serif;
-    background: #f5f5f5;
-    min-height: 100vh;
+  :root {
+    --bg: #0d1117; --bg2: #161b22; --bg3: #21262d;
+    --border: #30363d; --text: #e6edf3; --text2: #8b949e; --text3: #6e7681;
+    --green: #3fb950; --green-dim: #1a3b22;
+    --red: #f85149; --red-dim: #3b1a1a;
+    --amber: #d29922; --amber-dim: #3b2a10;
+    --blue: #58a6ff; --blue-dim: #1a2d4a;
+    --radius: 10px;
+  }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow: hidden; }
+
+  .topbar {
+    height: 52px; background: var(--bg2); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 20px; gap: 16px;
+    position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+  }
+  .logo { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
+  .topbar-badge { font-size: 11px; padding: 3px 8px; border-radius: 4px; background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber); font-weight: 600; }
+  .topbar-clock { margin-left: auto; font-family: 'DM Mono', monospace; font-size: 13px; color: var(--text2); }
+
+  .layout {
+    position: fixed; top: 52px; left: 0; right: 0; bottom: 0;
     display: flex;
-    flex-direction: column;
-    overflow: hidden;
   }
 
-  /* Barra do navegador simulada */
-  .browser-bar {
-    background: #1a73e8;
-    color: #fff;
-    padding: 10px 14px;
-    font-size: 13px;
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-shrink: 0;
-  }
-  .browser-url {
-    background: rgba(255,255,255,.2);
-    border-radius: 12px;
-    padding: 3px 12px;
-    font-size: 11px;
-    font-weight: 400;
-  }
-  .browser-badge {
-    margin-left: auto;
-    background: rgba(255,255,255,.2);
-    border-radius: 10px;
-    padding: 2px 8px;
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: .3px;
+  /* SIDEBAR */
+  .sidebar {
+    width: 340px; min-width: 340px; background: var(--bg2);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden;
   }
 
-  /* Mapa ocupa a maior parte */
-  #map {
-    flex: 1;
-    min-height: 0;
+  .config-box {
+    padding: 16px; border-bottom: 1px solid var(--border);
   }
+  .config-title { font-size: 11px; font-weight: 600; color: var(--text3); letter-spacing: .8px; text-transform: uppercase; margin-bottom: 10px; }
 
-  /* Alerta de desvio / status */
-  .alert-strip {
-    background: #fce8e6;
-    border-left: 4px solid #d93025;
-    padding: 10px 14px;
-    font-size: 13px;
-    font-weight: 600;
-    color: #c5221f;
+  .firebase-form { display: flex; flex-direction: column; gap: 8px; }
+  .firebase-input {
+    background: var(--bg3); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); font-family: 'DM Mono', monospace; font-size: 11px;
+    padding: 7px 10px; width: 100%;
+  }
+  .firebase-input:focus { outline: none; border-color: var(--blue); }
+  .firebase-input::placeholder { color: var(--text3); }
+  .btn-connect {
+    background: var(--blue-dim); border: 1px solid var(--blue); border-radius: 6px;
+    color: var(--blue); font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600;
+    padding: 8px; cursor: pointer; transition: all .15s; text-align: center;
+  }
+  .btn-connect:hover { background: var(--blue); color: #fff; }
+  .btn-connect:disabled { opacity: .4; cursor: not-allowed; }
+
+  .session-box {
+    padding: 14px 16px; border-bottom: 1px solid var(--border);
     display: none;
-    flex-shrink: 0;
   }
-  .alert-strip.visible { display: block; }
+  .session-box.visible { display: block; }
+  .session-id-label { font-size: 11px; font-weight: 600; color: var(--text3); letter-spacing: .8px; text-transform: uppercase; margin-bottom: 8px; }
+  .session-id-val {
+    font-family: 'DM Mono', monospace; font-size: 13px; color: var(--amber);
+    background: var(--amber-dim); border: 1px solid var(--amber); border-radius: 6px;
+    padding: 6px 10px; word-break: break-all; margin-bottom: 8px;
+  }
+  .qr-area { display: flex; justify-content: center; margin: 10px 0; }
+  #qrcode { background: #fff; padding: 8px; border-radius: 8px; width: 164px; height: 164px; display: block; }
+  .btn-copy {
+    width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text2); font-family: 'DM Sans', sans-serif; font-size: 12px;
+    padding: 7px; cursor: pointer; transition: all .15s;
+  }
+  .btn-copy:hover { border-color: var(--green); color: var(--green); }
 
-  /* Painel inferior */
-  .bottom-panel {
-    background: #fff;
-    border-top: 1px solid #e0e0e0;
-    padding: 14px 16px;
-    flex-shrink: 0;
+  /* STATUS CARDS */
+  .status-section {
+    padding: 14px 16px; border-bottom: 1px solid var(--border);
+    display: none;
   }
+  .status-section.visible { display: block; }
+  .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .status-card {
+    background: var(--bg3); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .sc-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 4px; }
+  .sc-val { font-size: 15px; font-weight: 600; }
+  .sc-val.verde { color: var(--green); }
+  .sc-val.vermelho { color: var(--red); }
+  .sc-val.amber { color: var(--amber); }
+  .sc-val.blue { color: var(--blue); }
+  .sc-val.mono { font-family: 'DM Mono', monospace; font-size: 13px; }
 
-  .session-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: #999;
-    text-transform: uppercase;
-    letter-spacing: .6px;
-    margin-bottom: 2px;
+  /* LOG */
+  .log-section { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+  .log-header { padding: 10px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .log-title { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .8px; }
+  .btn-clear { font-size: 11px; color: var(--text3); background: none; border: none; cursor: pointer; }
+  .btn-clear:hover { color: var(--text); }
+  .log-list { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+  .log-item {
+    font-family: 'DM Mono', monospace; font-size: 11px;
+    padding: 5px 8px; border-radius: 4px; border-left: 2px solid transparent;
+    display: flex; gap: 8px;
   }
-  .session-id {
-    font-family: monospace;
-    font-size: 14px;
-    font-weight: 700;
-    color: #1a73e8;
-    margin-bottom: 10px;
-  }
+  .log-item.ok { border-color: var(--green); background: var(--green-dim); color: #b2f0be; }
+  .log-item.warn { border-color: var(--amber); background: var(--amber-dim); color: #f0d57a; }
+  .log-item.err { border-color: var(--red); background: var(--red-dim); color: #f0a09e; }
+  .log-item.info { border-color: var(--blue); background: var(--blue-dim); color: #a0c9f0; }
+  .log-time { color: var(--text3); flex-shrink: 0; }
 
-  .status-row {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 10px;
-    flex-wrap: wrap;
-  }
-  .status-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 600;
-  }
-  .status-pill.ok { background: #e6f4ea; color: #137333; }
-  .status-pill.warn { background: #fef7e0; color: #b06000; }
-  .status-pill.err { background: #fce8e6; color: #c5221f; }
-  .status-pill.info { background: #e8f0fe; color: #1a73e8; }
+  /* MAP */
+  .map-area { flex: 1; position: relative; }
+  #map { width: 100%; height: 100%; background: #1a1a2e; }
 
-  .info-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
-    margin-bottom: 10px;
+  /* Map overlay info */
+  .map-info {
+    position: absolute; top: 12px; left: 12px; z-index: 999;
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 14px; min-width: 200px;
+    display: none;
   }
-  .info-item {
-    background: #f8f9fa;
-    border-radius: 6px;
-    padding: 8px 10px;
-  }
-  .info-item-label { font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: .5px; }
-  .info-item-val { font-size: 13px; font-weight: 600; color: #333; font-family: monospace; }
+  .map-info.visible { display: block; }
+  .mi-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 5px; font-size: 12px; }
+  .mi-row:last-child { margin-bottom: 0; }
+  .mi-label { color: var(--text2); }
+  .mi-val { font-family: 'DM Mono', monospace; color: var(--text); }
 
-  .progress-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    color: #999;
-    margin-top: 6px;
+  .no-session-msg {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    text-align: center; color: var(--text2);
+    z-index: 500;
   }
-  .progress-step { font-weight: 600; }
-  .progress-step.done { color: #1a73e8; }
-  .progress-sep { color: #ccc; }
+  .no-session-msg h3 { font-size: 16px; margin-bottom: 8px; color: var(--text3); }
+  .no-session-msg p { font-size: 13px; }
 
-  /* Tela de erro / loading */
-  .overlay-msg {
-    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-    background: #fff;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    padding: 32px; text-align: center; z-index: 9999;
-  }
-  .overlay-msg h2 { font-size: 20px; color: #1a73e8; margin-bottom: 12px; }
-  .overlay-msg p { font-size: 14px; color: #666; line-height: 1.6; margin-bottom: 16px; }
-  .overlay-msg .code { font-family: monospace; background: #f0f0f0; padding: 8px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 16px; word-break: break-all; }
-  .btn-start {
-    background: #1a73e8; color: #fff; border: none; border-radius: 8px;
-    padding: 14px 28px; font-size: 16px; font-weight: 600; cursor: pointer;
-    font-family: 'DM Sans', sans-serif; width: 100%; max-width: 300px;
-  }
-  .btn-start:active { background: #1557b0; }
-  .spinner {
-    width: 40px; height: 40px; border: 4px solid #e8f0fe;
-    border-top-color: #1a73e8; border-radius: 50%;
-    animation: spin .8s linear infinite; margin-bottom: 16px;
-  }
-  @keyframes spin { to{transform:rotate(360deg)} }
+  .leaflet-tile { filter: brightness(.65) invert(1) contrast(3) hue-rotate(200deg) saturate(.3) brightness(.65); }
+  .leaflet-container { background: #1a1a2e; }
 
-  .dot-pulse {
-    display: inline-block;
-    width: 8px; height: 8px; border-radius: 50%;
-    background: #1a73e8;
-    animation: dpulse 1.5s ease-in-out infinite;
+  .alert-bar {
+    position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    background: var(--red-dim); border: 1px solid var(--red); border-radius: 8px;
+    padding: 10px 20px; color: var(--red); font-weight: 600; font-size: 13px;
+    z-index: 998; display: none; animation: fadeInUp .3s ease;
   }
-  @keyframes dpulse { 0%,100%{opacity:.3} 50%{opacity:1} }
+  .alert-bar.visible { display: block; }
+  @keyframes fadeInUp { from{opacity:0;transform:translateX(-50%) translateY(10px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
+
+  .conn-indicator {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--text2);
+  }
+  .conn-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text3); }
+  .conn-dot.conectado { background: var(--green); animation: pulse 2s ease-in-out infinite; }
+  .conn-dot.aguardando { background: var(--amber); animation: pulse 1s ease-in-out infinite; }
+  .conn-dot.offline { background: var(--red); }
 </style>
 </head>
 <body>
 
-<!-- OVERLAY: tela inicial ou de erro -->
-<div class="overlay-msg" id="overlay">
-  <div class="spinner"></div>
-  <h2>GeoScan · Teste</h2>
-  <p id="overlay-msg">Lendo parâmetros da sessão...</p>
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-dot"></div>
+    GeoScan · Painel de Teste
+  </div>
+  <div class="topbar-badge">MODO TESTE</div>
+  <div class="conn-indicator" id="conn-indicator">
+    <div class="conn-dot" id="conn-dot"></div>
+    <span id="conn-text">Desconectado</span>
+  </div>
+  <div class="topbar-clock" id="clock"></div>
 </div>
 
-<!-- INTERFACE PRINCIPAL (oculta até conectar) -->
-<div class="browser-bar">
-  <span>GeoScan</span>
-  <span class="browser-url">geoscan.app/rota/teste</span>
-  <span class="browser-badge" id="session-badge">—</span>
-</div>
+<div class="layout">
+  <div class="sidebar">
 
-<div class="alert-strip" id="alert-strip">
-  ⚠ Você saiu da rota autorizada! Retorne imediatamente.
-</div>
+    <!-- CONFIGURAÇÃO FIREBASE -->
+    <div class="config-box">
+      <div class="config-title">1. Configure o Firebase</div>
+      <div class="firebase-form">
+        <input class="firebase-input" id="fb-url" placeholder="URL do Realtime Database (ex: https://xxx.firebaseio.com)" />
+        <input class="firebase-input" id="fb-key" placeholder="API Key do Firebase" />
+        <button class="btn-connect" id="btn-connect" onclick="conectarFirebase()">Conectar e Gerar Sessão</button>
+      </div>
+      <div style="margin-top:8px; font-size:11px; color:var(--text3); line-height:1.5;">
+        ℹ️ Veja as instruções abaixo do painel para criar o Firebase gratuito.
+      </div>
+    </div>
 
-<div id="map"></div>
+    <!-- SESSÃO GERADA -->
+    <div class="session-box" id="session-box">
+      <div class="session-id-label">2. Sessão gerada — envie ao celular</div>
+      <div class="session-id-val" id="session-id-display"></div>
+      <div class="qr-area"><img id="qrcode" alt="QR Code" /></div>
+      <button class="btn-copy" onclick="copiarLink()">📋 Copiar link para o celular</button>
+    </div>
 
-<div class="bottom-panel">
-  <div class="session-label">Sessão de teste</div>
-  <div class="session-id" id="session-display">—</div>
+    <!-- STATUS AO VIVO -->
+    <div class="status-section" id="status-section">
+      <div class="config-title" style="margin-bottom:10px;">Status ao vivo</div>
+      <div class="status-grid">
+        <div class="status-card">
+          <div class="sc-label">Conexão GPS</div>
+          <div class="sc-val" id="st-conexao">—</div>
+        </div>
+        <div class="status-card">
+          <div class="sc-label">Aba ativa</div>
+          <div class="sc-val" id="st-aba">—</div>
+        </div>
+        <div class="status-card">
+          <div class="sc-label">Precisão GPS</div>
+          <div class="sc-val mono" id="st-precisao">—</div>
+        </div>
+        <div class="status-card">
+          <div class="sc-label">Última posição</div>
+          <div class="sc-val mono" id="st-ultima">—</div>
+        </div>
+        <div class="status-card">
+          <div class="sc-label">Pontos enviados</div>
+          <div class="sc-val blue" id="st-pontos">0</div>
+        </div>
+        <div class="status-card">
+          <div class="sc-label">Falhas / perdas</div>
+          <div class="sc-val vermelho" id="st-falhas">0</div>
+        </div>
+      </div>
+    </div>
 
-  <div class="status-row">
-    <span class="status-pill" id="pill-gps">⏳ GPS</span>
-    <span class="status-pill" id="pill-conexao">⏳ Servidor</span>
-    <span class="status-pill" id="pill-aba">✓ Aba ativa</span>
+    <!-- LOG DE EVENTOS -->
+    <div class="log-section">
+      <div class="log-header">
+        <span class="log-title">Log de eventos</span>
+        <button class="btn-clear" onclick="limparLog()">Limpar</button>
+      </div>
+      <div class="log-list" id="log-list">
+        <div class="log-item info"><span class="log-time">--:--:--</span><span>Aguardando conexão com Firebase...</span></div>
+      </div>
+    </div>
   </div>
 
-  <div class="info-grid">
-    <div class="info-item">
-      <div class="info-item-label">Precisão</div>
-      <div class="info-item-val" id="val-precisao">—</div>
-    </div>
-    <div class="info-item">
-      <div class="info-item-label">Pontos enviados</div>
-      <div class="info-item-val" id="val-pontos">0</div>
-    </div>
-    <div class="info-item">
-      <div class="info-item-label">Velocidade</div>
-      <div class="info-item-val" id="val-velocidade">—</div>
-    </div>
-    <div class="info-item">
-      <div class="info-item-label">Intervalo</div>
-      <div class="info-item-val" id="val-intervalo">—</div>
-    </div>
-  </div>
+  <!-- MAPA -->
+  <div class="map-area">
+    <div id="map"></div>
 
-  <div class="progress-row">
-    <span class="progress-step done">✓ QR escaneado</span>
-    <span class="progress-sep">›</span>
-    <span class="progress-step done">Em rota</span>
-    <span class="progress-sep">›</span>
-    <span class="progress-step">Entrega</span>
-    <span class="progress-sep">›</span>
-    <span class="progress-step">Saída</span>
+    <div class="no-session-msg" id="no-session-msg">
+      <h3>Aguardando sessão de teste</h3>
+      <p>Configure o Firebase e gere uma sessão para começar.</p>
+    </div>
+
+    <div class="map-info" id="map-info">
+      <div class="mi-row">
+        <span class="mi-label">Lat</span>
+        <span class="mi-val" id="mi-lat">—</span>
+      </div>
+      <div class="mi-row">
+        <span class="mi-label">Lng</span>
+        <span class="mi-val" id="mi-lng">—</span>
+      </div>
+      <div class="mi-row">
+        <span class="mi-label">Precisão</span>
+        <span class="mi-val" id="mi-prec">—</span>
+      </div>
+      <div class="mi-row">
+        <span class="mi-label">Velocidade</span>
+        <span class="mi-val" id="mi-vel">—</span>
+      </div>
+    </div>
+
+    <div class="alert-bar" id="alert-bar"></div>
   </div>
 </div>
 
 <script>
-// ── Ler parâmetros da URL ─────────────────────────────────
-const params = new URLSearchParams(window.location.search);
-const SESSION_ID = params.get('session');
-const DB_URL = params.get('db');
-const API_KEY = params.get('key');
+// ── Relógio ──────────────────────────────────────────────
+setInterval(() => {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('pt-BR');
+}, 1000);
 
-const overlayEl = document.getElementById('overlay');
-const overlayMsg = document.getElementById('overlay-msg');
+// ── Estado global ─────────────────────────────────────────
+let db = null;
+let sessionId = null;
+let sessionRef = null;
+let map = null;
+let marker = null;
+let trail = null;
+let trailPoints = [];
+let pontosRecebidos = 0;
+let falhasContadas = 0;
+let ultimoTimestamp = null;
+let watchdogInterval = null;
+let sessaoAtiva = false;
 
-if (!SESSION_ID || !DB_URL || !API_KEY) {
-  overlayMsg.innerHTML = '❌ Link inválido.<br><br>Abra o Painel de Teste no computador e escaneie o QR Code gerado.';
-  document.querySelector('.spinner').style.display = 'none';
-  // Sem parâmetros, não há o que fazer
-} else {
-  document.getElementById('session-display').textContent = SESSION_ID;
-  document.getElementById('session-badge').textContent = SESSION_ID;
-  overlayMsg.textContent = 'Conectando ao servidor...';
-  iniciar();
+// ── Mapa Leaflet ──────────────────────────────────────────
+function initMap() {
+  map = L.map('map', { zoomControl: true, attributionControl: false }).setView([-20.8127, -49.3445], 15);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 }
+initMap();
 
 // ── Firebase ──────────────────────────────────────────────
-let db, sessionRef;
-let map, marker, trail, trailPoints = [];
-let pontosEnviados = 0;
-let gpsWatch = null;
-let ultimoEnvio = null;
+function gerarSessionId() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let id = 'GS-';
+  for (let i = 0; i < 6; i++) id += chars[Math.floor(Math.random() * chars.length)];
+  return id;
+}
 
-function iniciar() {
-  if (typeof firebase === 'undefined') {
-    overlayMsg.innerHTML = '❌ Firebase bloqueado pelo navegador.<br><br>Abra este link no <strong>Chrome</strong> — o Brave Browser bloqueia scripts necessários.';
-    document.querySelector('.spinner').style.display = 'none';
+function conectarFirebase() {
+  const url = document.getElementById('fb-url').value.trim();
+  const key = document.getElementById('fb-key').value.trim();
+
+  if (!url || !key) {
+    alert('Preencha a URL e a API Key do Firebase.');
     return;
   }
-  const config = { apiKey: API_KEY, databaseURL: DB_URL };
+
+  document.getElementById('btn-connect').disabled = true;
+  document.getElementById('btn-connect').textContent = 'Conectando...';
+
   try {
-    if (!firebase.apps.length) {
-      firebase.initializeApp(config);
+    if (firebase.apps.length > 0) {
+      firebase.app().delete().then(() => iniciarFirebase(url, key));
+    } else {
+      iniciarFirebase(url, key);
     }
+  } catch(e) {
+    iniciarFirebase(url, key);
+  }
+}
+
+function iniciarFirebase(url, key) {
+  const config = {
+    apiKey: key,
+    databaseURL: url
+  };
+
+  try {
+    firebase.initializeApp(config);
     db = firebase.database();
-    sessionRef = db.ref('sessoes/' + SESSION_ID);
 
-    // Testa se a sessão existe
-    sessionRef.once('value').then(snap => {
-      if (!snap.val()) {
-        overlayMsg.innerHTML = '❌ Sessão não encontrada.<br><br>Verifique se o Painel de Teste está aberto e a sessão foi criada.';
-        document.querySelector('.spinner').style.display = 'none';
-        return;
+    sessionId = gerarSessionId();
+    sessionRef = db.ref('sessoes/' + sessionId);
+
+    // Testa conexão
+    db.ref('.info/connected').on('value', snap => {
+      const online = snap.val();
+      const dot = document.getElementById('conn-dot');
+      const txt = document.getElementById('conn-text');
+      if (online) {
+        dot.className = 'conn-dot conectado';
+        txt.textContent = 'Firebase conectado';
+        addLog('ok', 'Firebase conectado com sucesso');
+      } else {
+        dot.className = 'conn-dot offline';
+        txt.textContent = 'Sem conexão Firebase';
+        addLog('err', 'Conexão com Firebase perdida');
       }
-
-      // Notifica painel que celular conectou
-      sessionRef.update({ celular_conectado: true, celular_conectado_em: new Date().toISOString() });
-
-      overlayMsg.textContent = 'Aguardando permissão de GPS...';
-      pedirPermissaoGPS();
-    }).catch(e => {
-      overlayMsg.innerHTML = '❌ Erro ao conectar: ' + e.message;
-      document.querySelector('.spinner').style.display = 'none';
     });
 
+    // Inicializa sessão no banco
+    sessionRef.set({
+      criada_em: new Date().toISOString(),
+      status: 'aguardando',
+      painel_ativo: true
+    });
+
+    mostrarSessao();
+    ouvirSessao();
+
+    document.getElementById('btn-connect').textContent = 'Reconectar';
+    document.getElementById('btn-connect').disabled = false;
+
   } catch(e) {
-    overlayMsg.innerHTML = '❌ Erro Firebase: ' + e.message;
-    document.querySelector('.spinner').style.display = 'none';
+    addLog('err', 'Erro ao conectar: ' + e.message);
+    document.getElementById('btn-connect').textContent = 'Conectar e Gerar Sessão';
+    document.getElementById('btn-connect').disabled = false;
   }
 }
 
-// ── GPS ───────────────────────────────────────────────────
-function pedirPermissaoGPS() {
-  if (!navigator.geolocation) {
-    overlayMsg.innerHTML = '❌ Este celular não suporta GPS.<br><br>Tente em outro dispositivo.';
-    document.querySelector('.spinner').style.display = 'none';
-    return;
-  }
+function mostrarSessao() {
+  const linkCelular = window.location.href.replace('geoscan-teste-painel.html', 'geoscan-teste-celular.html')
+    + '?session=' + sessionId
+    + '&db=' + encodeURIComponent(document.getElementById('fb-url').value.trim())
+    + '&key=' + encodeURIComponent(document.getElementById('fb-key').value.trim());
 
-  // Mostra botão para o usuário interagir (necessário em iOS)
-  overlayEl.innerHTML = `
-    <div style="font-size:48px;margin-bottom:16px;">📍</div>
-    <h2>GeoScan · Teste</h2>
-    <p>Para iniciar o rastreamento, o sistema precisa da sua localização GPS.</p>
-    <p style="font-size:12px;color:#999;margin-bottom:20px;">Sessão: <strong>${SESSION_ID}</strong></p>
-    <button class="btn-start" onclick="ativarGPS()">Iniciar rastreamento</button>
-  `;
+  document.getElementById('session-id-display').textContent = sessionId;
+  document.getElementById('session-box').classList.add('visible');
+  document.getElementById('status-section').classList.add('visible');
+
+  // Gera QR Code via API pública (sem biblioteca JS)
+  const qrImg = document.getElementById('qrcode');
+  const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=' + encodeURIComponent(linkCelular);
+  qrImg.src = qrUrl;
+  qrImg.onerror = () => { qrImg.alt = 'QR Code indisponível — use o botão Copiar Link'; };
+
+  window._linkCelular = linkCelular;
+  addLog('info', 'Sessão criada: ' + sessionId);
+  addLog('info', 'Aguardando celular escanear o QR Code...');
+
+  document.getElementById('conn-dot').className = 'conn-dot aguardando';
+  document.getElementById('conn-text').textContent = 'Aguardando celular';
 }
 
-function ativarGPS() {
-  document.getElementById('overlay').innerHTML = `
-    <div class="spinner"></div>
-    <h2>GeoScan · Teste</h2>
-    <p>Obtendo localização GPS...</p>
-  `;
+function copiarLink() {
+  if (window._linkCelular) {
+    navigator.clipboard.writeText(window._linkCelular).then(() => {
+      const btn = document.querySelector('.btn-copy');
+      btn.textContent = '✓ Link copiado!';
+      setTimeout(() => btn.textContent = '📋 Copiar link para o celular', 2000);
+    });
+  }
+}
 
-  navigator.geolocation.getCurrentPosition(pos => {
-    // Esconde overlay e mostra interface
-    document.getElementById('overlay').style.display = 'none';
-    document.body.style.overflow = 'hidden';
+// ── Ouvir dados do celular ────────────────────────────────
+function ouvirSessao() {
+  if (!sessionRef) return;
 
-    // Inicializa mapa na posição atual
-    const latlng = [pos.coords.latitude, pos.coords.longitude];
-    initMap(latlng);
+  sessionRef.on('value', snap => {
+    const data = snap.val();
+    if (!data) return;
 
-    // Começa monitoramento contínuo
-    gpsWatch = navigator.geolocation.watchPosition(
-      onPosicao,
-      onErroPosicao,
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0
+    // Celular conectou
+    if (data.celular_conectado && !sessaoAtiva) {
+      sessaoAtiva = true;
+      document.getElementById('no-session-msg').style.display = 'none';
+      document.getElementById('map-info').classList.add('visible');
+      document.getElementById('conn-dot').className = 'conn-dot conectado';
+      document.getElementById('conn-text').textContent = 'Celular conectado';
+      addLog('ok', 'Celular conectou à sessão!');
+      iniciarWatchdog();
+    }
+
+    // Atualiza status da aba
+    if (data.aba_ativa !== undefined) {
+      const abaEl = document.getElementById('st-aba');
+      if (data.aba_ativa) {
+        abaEl.textContent = 'Ativa ✓';
+        abaEl.className = 'sc-val verde';
+      } else {
+        abaEl.textContent = 'Em BG ⚠';
+        abaEl.className = 'sc-val amber';
+        addLog('warn', 'Entregador minimizou o navegador (aba em background)');
+        mostrarAlerta('⚠ Celular em background — GPS pode parar de enviar');
       }
-    );
+    }
 
-    setPillOk('pill-gps', '✓ GPS ativo');
-    setPillOk('pill-conexao', '✓ Conectado');
-
-  }, err => {
-    document.getElementById('overlay').innerHTML = `
-      <div style="font-size:48px;margin-bottom:16px;">⚠️</div>
-      <h2>Permissão negada</h2>
-      <p>Você precisa permitir o acesso à localização.<br>Vá nas configurações do navegador e permita o GPS para este site.</p>
-      <p style="color:#d93025;margin-top:12px;font-size:13px;">${erroGPSMsg(err.code)}</p>
-    `;
-  }, { enableHighAccuracy: true, timeout: 10000 });
+    // Posição GPS nova
+    if (data.posicao) {
+      processarPosicao(data.posicao);
+    }
+  });
 }
 
-function onPosicao(pos) {
+function processarPosicao(pos) {
   const agora = Date.now();
-  const lat = pos.coords.latitude;
-  const lng = pos.coords.longitude;
-  const acc = pos.coords.accuracy;
-  const spd = pos.coords.speed;
-
-  // Calcula intervalo
-  let intervalo = '—';
-  if (ultimoEnvio) {
-    intervalo = ((agora - ultimoEnvio) / 1000).toFixed(1) + 's';
+  if (ultimoTimestamp) {
+    const intervalo = (agora - ultimoTimestamp) / 1000;
+    if (intervalo > 15) {
+      falhasContadas++;
+      document.getElementById('st-falhas').textContent = falhasContadas;
+      addLog('err', `Gap de ${intervalo.toFixed(0)}s sem posição — possível perda de sinal`);
+    }
   }
-  ultimoEnvio = agora;
+  ultimoTimestamp = agora;
 
-  pontosEnviados++;
-  document.getElementById('val-pontos').textContent = pontosEnviados;
-  document.getElementById('val-precisao').textContent = acc ? Math.round(acc) + 'm' : '—';
-  document.getElementById('val-velocidade').textContent = spd ? (spd * 3.6).toFixed(1) + ' km/h' : '0 km/h';
-  document.getElementById('val-intervalo').textContent = intervalo;
+  pontosRecebidos++;
+  const horario = new Date().toLocaleTimeString('pt-BR');
 
-  // Envia ao Firebase
-  const posData = {
-    lat, lng,
-    accuracy: acc,
-    speed: spd,
-    timestamp: agora,
-    pontos_enviados: pontosEnviados
-  };
-  sessionRef.update({ posicao: posData, aba_ativa: true });
+  // Atualiza contadores
+  document.getElementById('st-pontos').textContent = pontosRecebidos;
+  document.getElementById('st-ultima').textContent = horario;
+  document.getElementById('st-conexao').textContent = 'Online ✓';
+  document.getElementById('st-conexao').className = 'sc-val verde';
 
-  // Atualiza mapa
-  const latlng = [lat, lng];
+  // Precisão
+  const prec = pos.accuracy ? Math.round(pos.accuracy) + 'm' : '—';
+  document.getElementById('st-precisao').textContent = prec;
+  document.getElementById('mi-prec').textContent = prec;
+
+  // Posição no mapa
+  const latlng = [pos.lat, pos.lng];
+  document.getElementById('mi-lat').textContent = pos.lat.toFixed(6);
+  document.getElementById('mi-lng').textContent = pos.lng.toFixed(6);
+  if (pos.speed !== null && pos.speed !== undefined) {
+    document.getElementById('mi-vel').textContent = (pos.speed * 3.6).toFixed(1) + ' km/h';
+  }
+
+  // Trilha
   trailPoints.push(latlng);
-
   if (trail) map.removeLayer(trail);
-  trail = L.polyline(trailPoints, { color: '#1a73e8', weight: 5, opacity: .9 }).addTo(map);
+  trail = L.polyline(trailPoints, { color: '#58a6ff', weight: 4, opacity: .8 }).addTo(map);
 
+  // Marcador
+  const color = '#3fb950';
   const icon = L.divIcon({
-    html: `<div style="width:18px;height:18px;border-radius:50%;background:#1a73e8;border:3px solid #fff;box-shadow:0 2px 8px rgba(26,115,232,.5)"></div>`,
-    iconSize:[18,18], iconAnchor:[9,9], className:''
+    html: `<div style="width:16px;height:16px;border-radius:50%;background:${color};border:3px solid #fff;box-shadow:0 0 0 3px ${color}55;"></div>`,
+    iconSize:[16,16], iconAnchor:[8,8], className:''
   });
   if (marker) map.removeLayer(marker);
   marker = L.marker(latlng, { icon }).addTo(map);
+  marker.bindTooltip(`📍 ${horario} · ${prec}`, { direction: 'top' });
   map.panTo(latlng);
 
-  setPillOk('pill-gps', '✓ GPS');
-  setPillOk('pill-conexao', '✓ Enviando');
-}
-
-function onErroPosicao(err) {
-  setPillErr('pill-gps', '✗ GPS falhou');
-  sessionRef.update({ erro_gps: erroGPSMsg(err.code), aba_ativa: true });
-}
-
-function erroGPSMsg(code) {
-  const msgs = { 1: 'Permissão negada', 2: 'Posição indisponível', 3: 'Timeout — sinal fraco' };
-  return msgs[code] || 'Erro desconhecido';
-}
-
-// ── Visibilidade da aba ───────────────────────────────────
-document.addEventListener('visibilitychange', () => {
-  const ativa = !document.hidden;
-  const pill = document.getElementById('pill-aba');
-
-  if (sessionRef) sessionRef.update({ aba_ativa: ativa });
-
-  if (ativa) {
-    pill.className = 'status-pill ok';
-    pill.textContent = '✓ Aba ativa';
-    document.getElementById('alert-strip').classList.remove('visible');
-  } else {
-    pill.className = 'status-pill warn';
-    pill.textContent = '⚠ Em background';
+  // Log a cada 5 pontos para não poluir
+  if (pontosRecebidos % 5 === 0 || pontosRecebidos === 1) {
+    addLog('ok', `Ponto #${pontosRecebidos} — precisão: ${prec}`);
   }
-});
 
-// ── Mapa Leaflet ──────────────────────────────────────────
-function initMap(center) {
-  map = L.map('map', {
-    zoomControl: false,
-    attributionControl: false,
-    dragging: true
-  }).setView(center, 17);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+  // Limpa alerta se estava mostrando
+  esconderAlerta();
+}
+
+// ── Watchdog — detecta celular sumido ─────────────────────
+function iniciarWatchdog() {
+  if (watchdogInterval) clearInterval(watchdogInterval);
+  watchdogInterval = setInterval(() => {
+    if (!ultimoTimestamp) return;
+    const secsDesde = (Date.now() - ultimoTimestamp) / 1000;
+    if (secsDesde > 20) {
+      document.getElementById('st-conexao').textContent = 'Sem sinal ✗';
+      document.getElementById('st-conexao').className = 'sc-val vermelho';
+      mostrarAlerta(`⚠ Sem posição há ${Math.round(secsDesde)}s — celular offline ou GPS suspenso`);
+      if (secsDesde > 30 && secsDesde < 32) {
+        addLog('err', `Celular sem enviar posição há ${Math.round(secsDesde)}s`);
+      }
+    } else if (secsDesde > 10) {
+      document.getElementById('st-conexao').textContent = 'Lento ⚠';
+      document.getElementById('st-conexao').className = 'sc-val amber';
+    }
+  }, 2000);
 }
 
 // ── UI helpers ────────────────────────────────────────────
-function setPillOk(id, txt) {
-  const el = document.getElementById(id);
-  el.className = 'status-pill ok';
-  el.textContent = txt;
+let alertaTimer = null;
+function mostrarAlerta(msg) {
+  const el = document.getElementById('alert-bar');
+  el.textContent = msg;
+  el.classList.add('visible');
+  if (alertaTimer) clearTimeout(alertaTimer);
+  alertaTimer = setTimeout(esconderAlerta, 6000);
 }
-function setPillWarn(id, txt) {
-  const el = document.getElementById(id);
-  el.className = 'status-pill warn';
-  el.textContent = txt;
+function esconderAlerta() {
+  document.getElementById('alert-bar').classList.remove('visible');
 }
-function setPillErr(id, txt) {
-  const el = document.getElementById(id);
-  el.className = 'status-pill err';
-  el.textContent = txt;
+
+function addLog(tipo, msg) {
+  const list = document.getElementById('log-list');
+  const hora = new Date().toLocaleTimeString('pt-BR');
+  const el = document.createElement('div');
+  el.className = 'log-item ' + tipo;
+  el.innerHTML = `<span class="log-time">${hora}</span><span>${msg}</span>`;
+  list.appendChild(el);
+  list.scrollTop = list.scrollHeight;
+  // Limita a 200 entradas
+  while (list.children.length > 200) list.removeChild(list.firstChild);
+}
+
+function limparLog() {
+  document.getElementById('log-list').innerHTML = '';
 }
 </script>
 </body>
