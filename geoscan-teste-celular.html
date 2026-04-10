@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>GeoScan — Teste de Rastreamento</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: #f5f5f5;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Barra do navegador simulada */
+  .browser-bar {
+    background: #1a73e8;
+    color: #fff;
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .browser-url {
+    background: rgba(255,255,255,.2);
+    border-radius: 12px;
+    padding: 3px 12px;
+    font-size: 11px;
+    font-weight: 400;
+  }
+  .browser-badge {
+    margin-left: auto;
+    background: rgba(255,255,255,.2);
+    border-radius: 10px;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .3px;
+  }
+
+  /* Mapa ocupa a maior parte */
+  #map {
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* Alerta de desvio / status */
+  .alert-strip {
+    background: #fce8e6;
+    border-left: 4px solid #d93025;
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #c5221f;
+    display: none;
+    flex-shrink: 0;
+  }
+  .alert-strip.visible { display: block; }
+
+  /* Painel inferior */
+  .bottom-panel {
+    background: #fff;
+    border-top: 1px solid #e0e0e0;
+    padding: 14px 16px;
+    flex-shrink: 0;
+  }
+
+  .session-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    margin-bottom: 2px;
+  }
+  .session-id {
+    font-family: monospace;
+    font-size: 14px;
+    font-weight: 700;
+    color: #1a73e8;
+    margin-bottom: 10px;
+  }
+
+  .status-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .status-pill.ok { background: #e6f4ea; color: #137333; }
+  .status-pill.warn { background: #fef7e0; color: #b06000; }
+  .status-pill.err { background: #fce8e6; color: #c5221f; }
+  .status-pill.info { background: #e8f0fe; color: #1a73e8; }
+
+  .info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .info-item {
+    background: #f8f9fa;
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+  .info-item-label { font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: .5px; }
+  .info-item-val { font-size: 13px; font-weight: 600; color: #333; font-family: monospace; }
+
+  .progress-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #999;
+    margin-top: 6px;
+  }
+  .progress-step { font-weight: 600; }
+  .progress-step.done { color: #1a73e8; }
+  .progress-sep { color: #ccc; }
+
+  /* Tela de erro / loading */
+  .overlay-msg {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: #fff;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 32px; text-align: center; z-index: 9999;
+  }
+  .overlay-msg h2 { font-size: 20px; color: #1a73e8; margin-bottom: 12px; }
+  .overlay-msg p { font-size: 14px; color: #666; line-height: 1.6; margin-bottom: 16px; }
+  .overlay-msg .code { font-family: monospace; background: #f0f0f0; padding: 8px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 16px; word-break: break-all; }
+  .btn-start {
+    background: #1a73e8; color: #fff; border: none; border-radius: 8px;
+    padding: 14px 28px; font-size: 16px; font-weight: 600; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; width: 100%; max-width: 300px;
+  }
+  .btn-start:active { background: #1557b0; }
+  .spinner {
+    width: 40px; height: 40px; border: 4px solid #e8f0fe;
+    border-top-color: #1a73e8; border-radius: 50%;
+    animation: spin .8s linear infinite; margin-bottom: 16px;
+  }
+  @keyframes spin { to{transform:rotate(360deg)} }
+
+  .dot-pulse {
+    display: inline-block;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #1a73e8;
+    animation: dpulse 1.5s ease-in-out infinite;
+  }
+  @keyframes dpulse { 0%,100%{opacity:.3} 50%{opacity:1} }
+</style>
+</head>
+<body>
+
+<!-- OVERLAY: tela inicial ou de erro -->
+<div class="overlay-msg" id="overlay">
+  <div class="spinner"></div>
+  <h2>GeoScan · Teste</h2>
+  <p id="overlay-msg">Lendo parâmetros da sessão...</p>
+</div>
+
+<!-- INTERFACE PRINCIPAL (oculta até conectar) -->
+<div class="browser-bar">
+  <span>GeoScan</span>
+  <span class="browser-url">geoscan.app/rota/teste</span>
+  <span class="browser-badge" id="session-badge">—</span>
+</div>
+
+<div class="alert-strip" id="alert-strip">
+  ⚠ Você saiu da rota autorizada! Retorne imediatamente.
+</div>
+
+<div id="map"></div>
+
+<div class="bottom-panel">
+  <div class="session-label">Sessão de teste</div>
+  <div class="session-id" id="session-display">—</div>
+
+  <div class="status-row">
+    <span class="status-pill" id="pill-gps">⏳ GPS</span>
+    <span class="status-pill" id="pill-conexao">⏳ Servidor</span>
+    <span class="status-pill" id="pill-aba">✓ Aba ativa</span>
+  </div>
+
+  <div class="info-grid">
+    <div class="info-item">
+      <div class="info-item-label">Precisão</div>
+      <div class="info-item-val" id="val-precisao">—</div>
+    </div>
+    <div class="info-item">
+      <div class="info-item-label">Pontos enviados</div>
+      <div class="info-item-val" id="val-pontos">0</div>
+    </div>
+    <div class="info-item">
+      <div class="info-item-label">Velocidade</div>
+      <div class="info-item-val" id="val-velocidade">—</div>
+    </div>
+    <div class="info-item">
+      <div class="info-item-label">Intervalo</div>
+      <div class="info-item-val" id="val-intervalo">—</div>
+    </div>
+  </div>
+
+  <div class="progress-row">
+    <span class="progress-step done">✓ QR escaneado</span>
+    <span class="progress-sep">›</span>
+    <span class="progress-step done">Em rota</span>
+    <span class="progress-sep">›</span>
+    <span class="progress-step">Entrega</span>
+    <span class="progress-sep">›</span>
+    <span class="progress-step">Saída</span>
+  </div>
+</div>
+
+<script>
+// ── Ler parâmetros da URL ─────────────────────────────────
+const params = new URLSearchParams(window.location.search);
+const SESSION_ID = params.get('session');
+const DB_URL = params.get('db');
+const API_KEY = params.get('key');
+
+const overlayEl = document.getElementById('overlay');
+const overlayMsg = document.getElementById('overlay-msg');
+
+if (!SESSION_ID || !DB_URL || !API_KEY) {
+  overlayMsg.innerHTML = '❌ Link inválido.<br><br>Abra o Painel de Teste no computador e escaneie o QR Code gerado.';
+  document.querySelector('.spinner').style.display = 'none';
+  // Sem parâmetros, não há o que fazer
+} else {
+  document.getElementById('session-display').textContent = SESSION_ID;
+  document.getElementById('session-badge').textContent = SESSION_ID;
+  overlayMsg.textContent = 'Conectando ao servidor...';
+  iniciar();
+}
+
+// ── Firebase ──────────────────────────────────────────────
+let db, sessionRef;
+let map, marker, trail, trailPoints = [];
+let pontosEnviados = 0;
+let gpsWatch = null;
+let ultimoEnvio = null;
+
+function iniciar() {
+  const config = { apiKey: API_KEY, databaseURL: DB_URL };
+  try {
+    firebase.initializeApp(config);
+    db = firebase.database();
+    sessionRef = db.ref('sessoes/' + SESSION_ID);
+
+    // Testa se a sessão existe
+    sessionRef.once('value').then(snap => {
+      if (!snap.val()) {
+        overlayMsg.innerHTML = '❌ Sessão não encontrada.<br><br>Verifique se o Painel de Teste está aberto e a sessão foi criada.';
+        document.querySelector('.spinner').style.display = 'none';
+        return;
+      }
+
+      // Notifica painel que celular conectou
+      sessionRef.update({ celular_conectado: true, celular_conectado_em: new Date().toISOString() });
+
+      overlayMsg.textContent = 'Aguardando permissão de GPS...';
+      pedirPermissaoGPS();
+    }).catch(e => {
+      overlayMsg.innerHTML = '❌ Erro ao conectar: ' + e.message;
+      document.querySelector('.spinner').style.display = 'none';
+    });
+
+  } catch(e) {
+    overlayMsg.innerHTML = '❌ Erro Firebase: ' + e.message;
+    document.querySelector('.spinner').style.display = 'none';
+  }
+}
+
+// ── GPS ───────────────────────────────────────────────────
+function pedirPermissaoGPS() {
+  if (!navigator.geolocation) {
+    overlayMsg.innerHTML = '❌ Este celular não suporta GPS.<br><br>Tente em outro dispositivo.';
+    document.querySelector('.spinner').style.display = 'none';
+    return;
+  }
+
+  // Mostra botão para o usuário interagir (necessário em iOS)
+  overlayEl.innerHTML = `
+    <div style="font-size:48px;margin-bottom:16px;">📍</div>
+    <h2>GeoScan · Teste</h2>
+    <p>Para iniciar o rastreamento, o sistema precisa da sua localização GPS.</p>
+    <p style="font-size:12px;color:#999;margin-bottom:20px;">Sessão: <strong>${SESSION_ID}</strong></p>
+    <button class="btn-start" onclick="ativarGPS()">Iniciar rastreamento</button>
+  `;
+}
+
+function ativarGPS() {
+  document.getElementById('overlay').innerHTML = `
+    <div class="spinner"></div>
+    <h2>GeoScan · Teste</h2>
+    <p>Obtendo localização GPS...</p>
+  `;
+
+  navigator.geolocation.getCurrentPosition(pos => {
+    // Esconde overlay e mostra interface
+    document.getElementById('overlay').style.display = 'none';
+    document.body.style.overflow = 'hidden';
+
+    // Inicializa mapa na posição atual
+    const latlng = [pos.coords.latitude, pos.coords.longitude];
+    initMap(latlng);
+
+    // Começa monitoramento contínuo
+    gpsWatch = navigator.geolocation.watchPosition(
+      onPosicao,
+      onErroPosicao,
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0
+      }
+    );
+
+    setPillOk('pill-gps', '✓ GPS ativo');
+    setPillOk('pill-conexao', '✓ Conectado');
+
+  }, err => {
+    document.getElementById('overlay').innerHTML = `
+      <div style="font-size:48px;margin-bottom:16px;">⚠️</div>
+      <h2>Permissão negada</h2>
+      <p>Você precisa permitir o acesso à localização.<br>Vá nas configurações do navegador e permita o GPS para este site.</p>
+      <p style="color:#d93025;margin-top:12px;font-size:13px;">${erroGPSMsg(err.code)}</p>
+    `;
+  }, { enableHighAccuracy: true, timeout: 10000 });
+}
+
+function onPosicao(pos) {
+  const agora = Date.now();
+  const lat = pos.coords.latitude;
+  const lng = pos.coords.longitude;
+  const acc = pos.coords.accuracy;
+  const spd = pos.coords.speed;
+
+  // Calcula intervalo
+  let intervalo = '—';
+  if (ultimoEnvio) {
+    intervalo = ((agora - ultimoEnvio) / 1000).toFixed(1) + 's';
+  }
+  ultimoEnvio = agora;
+
+  pontosEnviados++;
+  document.getElementById('val-pontos').textContent = pontosEnviados;
+  document.getElementById('val-precisao').textContent = acc ? Math.round(acc) + 'm' : '—';
+  document.getElementById('val-velocidade').textContent = spd ? (spd * 3.6).toFixed(1) + ' km/h' : '0 km/h';
+  document.getElementById('val-intervalo').textContent = intervalo;
+
+  // Envia ao Firebase
+  const posData = {
+    lat, lng,
+    accuracy: acc,
+    speed: spd,
+    timestamp: agora,
+    pontos_enviados: pontosEnviados
+  };
+  sessionRef.update({ posicao: posData, aba_ativa: true });
+
+  // Atualiza mapa
+  const latlng = [lat, lng];
+  trailPoints.push(latlng);
+
+  if (trail) map.removeLayer(trail);
+  trail = L.polyline(trailPoints, { color: '#1a73e8', weight: 5, opacity: .9 }).addTo(map);
+
+  const icon = L.divIcon({
+    html: `<div style="width:18px;height:18px;border-radius:50%;background:#1a73e8;border:3px solid #fff;box-shadow:0 2px 8px rgba(26,115,232,.5)"></div>`,
+    iconSize:[18,18], iconAnchor:[9,9], className:''
+  });
+  if (marker) map.removeLayer(marker);
+  marker = L.marker(latlng, { icon }).addTo(map);
+  map.panTo(latlng);
+
+  setPillOk('pill-gps', '✓ GPS');
+  setPillOk('pill-conexao', '✓ Enviando');
+}
+
+function onErroPosicao(err) {
+  setPillErr('pill-gps', '✗ GPS falhou');
+  sessionRef.update({ erro_gps: erroGPSMsg(err.code), aba_ativa: true });
+}
+
+function erroGPSMsg(code) {
+  const msgs = { 1: 'Permissão negada', 2: 'Posição indisponível', 3: 'Timeout — sinal fraco' };
+  return msgs[code] || 'Erro desconhecido';
+}
+
+// ── Visibilidade da aba ───────────────────────────────────
+document.addEventListener('visibilitychange', () => {
+  const ativa = !document.hidden;
+  const pill = document.getElementById('pill-aba');
+
+  if (sessionRef) sessionRef.update({ aba_ativa: ativa });
+
+  if (ativa) {
+    pill.className = 'status-pill ok';
+    pill.textContent = '✓ Aba ativa';
+    document.getElementById('alert-strip').classList.remove('visible');
+  } else {
+    pill.className = 'status-pill warn';
+    pill.textContent = '⚠ Em background';
+  }
+});
+
+// ── Mapa Leaflet ──────────────────────────────────────────
+function initMap(center) {
+  map = L.map('map', {
+    zoomControl: false,
+    attributionControl: false,
+    dragging: true
+  }).setView(center, 17);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+}
+
+// ── UI helpers ────────────────────────────────────────────
+function setPillOk(id, txt) {
+  const el = document.getElementById(id);
+  el.className = 'status-pill ok';
+  el.textContent = txt;
+}
+function setPillWarn(id, txt) {
+  const el = document.getElementById(id);
+  el.className = 'status-pill warn';
+  el.textContent = txt;
+}
+function setPillErr(id, txt) {
+  const el = document.getElementById(id);
+  el.className = 'status-pill err';
+  el.textContent = txt;
+}
+</script>
+</body>
+</html>
